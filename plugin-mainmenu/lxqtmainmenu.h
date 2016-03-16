@@ -81,6 +81,8 @@ protected:
 private:
     void setMenuFontSize();
     void setButtonIcon();
+    void searchActions(QString const & filter);
+    void findFlattenActions(QMenu * menu, QString const & filter);
 
 private:
     QToolButton mButton;
@@ -89,6 +91,8 @@ private:
     GlobalKeyShortcut::Action *mShortcut;
     MenuStyle mTopMenuStyle;
     QWidgetAction * mSearch;
+    QAction * mSearchBorder;
+    QList<QAction *> mFoundActions;
 
 #ifdef HAVE_MENU_CACHE
     MenuCache* mMenuCache;

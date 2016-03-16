@@ -240,7 +240,11 @@ static bool filterMenu(QMenu * menu, QString const & filter)
  ************************************************/
 void LXQtMainMenu::searchTextChanged(QString const & text)
 {
-    filterMenu(mMenu, text);
+    //TODO:
+    //if (mFlatSearch)
+        searchActions(text);
+    //else
+        //filterMenu(mMenu, text);
 }
 
 /************************************************
@@ -257,6 +261,56 @@ void LXQtMainMenu::setSearchFocus(QAction *action)
 /************************************************
 
  ************************************************/
+void LXQtMainMenu::findFlattenActions(QMenu * menu, QString const & filter)
+{
+    for (auto const & action : menu->actions())
+    {
+        if (action == mSearchBorder)
+            break;
+
+        if (QMenu * sub_menu = action->menu())
+        {
+            findFlattenActions(sub_menu, filter);/*recursion*/
+        } else if (nullptr == qobject_cast<QWidgetAction *>(action)
+                && !action->isSeparator()
+                && !filter.isEmpty())
+        {
+            //real menu action -> app
+            if (action->text().contains(filter, Qt::CaseInsensitive) || action->toolTip().contains(filter, Qt::CaseInsensitive))
+            {
+                //the XdgCachedMenuAction does load the icon upon showing its menu
+#ifdef HAVE_MENU_CACHE
+                XdgCachedMenuAction * cached_action = qobject_cast<XdgCachedMenuAction *>(action);
+                if (action->icon().isNull() && nullptr != cached_action)
+                    cached_action->updateIcon();
+#endif
+                QAction * proxy_act = new QAction{action->icon(), action->text(), nullptr};
+                connect(proxy_act, &QAction::triggered, action, &QAction::trigger);
+                mMenu->insertAction(mSearch, proxy_act);
+                mFoundActions << proxy_act;
+            }
+        }
+        action->setVisible(filter.isEmpty());
+    }
+}
+
+/************************************************
+
+ ************************************************/
+void LXQtMainMenu::searchActions(QString const & filter)
+{
+    std::for_each(std::begin(mFoundActions), std::end(mFoundActions), [this] (QAction * act)
+    {
+        mMenu->removeAction(act);
+        act->deleteLater();
+    });
+    mFoundActions.clear();
+    findFlattenActions(mMenu, filter);
+}
+
+/************************************************
+
+ ************************************************/
 void LXQtMainMenu::buildMenu()
 {
 #ifdef HAVE_MENU_CACHE
@@ -266,8 +320,6 @@ void LXQtMainMenu::buildMenu()
 #endif
     menu->setObjectName("TopLevelMainMenu");
     menu->setStyle(&mTopMenuStyle);
-
-    menu->addSeparator();
 
     Q_FOREACH(QAction* action, menu->actions())
     {
@@ -279,7 +331,7 @@ void LXQtMainMenu::buildMenu()
     connect(menu, &QMenu::aboutToHide, &mHideTimer, static_cast<void (QTimer::*)()>(&QTimer::start));
     connect(menu, &QMenu::aboutToShow, &mHideTimer, &QTimer::stop);
 
-    menu->addSeparator();
+    mSearchBorder = menu->addSeparator();
     if(mMenu)
       mMenu->removeAction(mSearch);
     menu->addAction(mSearch);
