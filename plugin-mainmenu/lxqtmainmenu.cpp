@@ -29,6 +29,7 @@
 #include "lxqtmainmenu.h"
 #include "lxqtmainmenuconfiguration.h"
 #include "../panel/lxqtpanel.h"
+#include "actionview.h"
 #include <QAction>
 #include <QTimer>
 #include <QMessageBox>
@@ -37,9 +38,12 @@
 #include <QResizeEvent>
 #include <QWidgetAction>
 #include <QLineEdit>
+#include <QVBoxLayout>
+#include <QStandardItem>
 #include <lxqt-globalkeys.h>
 #include <algorithm> // for find_if()
 #include <KWindowSystem/KWindowSystem>
+#include <QDebug>
 
 #include <XdgMenuWidget>
 
@@ -54,7 +58,10 @@ LXQtMainMenu::LXQtMainMenu(const ILXQtPanelPluginStartupInfo &startupInfo):
     ILXQtPanelPlugin(startupInfo),
     mMenu(0),
     mShortcut(0),
-    mSearch{new QWidgetAction{this}}
+    mSearchEditAction{new QWidgetAction{this}},
+    mSearchViewAction{new QWidgetAction{this}},
+    mFilterMenu(true),
+    mFilterShow(true)
 {
 #ifdef HAVE_MENU_CACHE
     mMenuCache = NULL;
@@ -78,12 +85,16 @@ LXQtMainMenu::LXQtMainMenu(const ILXQtPanelPluginStartupInfo &startupInfo):
 
     connect(&mButton, &QToolButton::clicked, this, &LXQtMainMenu::showHideMenu);
 
-    QLineEdit * edit = new QLineEdit;
-    edit->setClearButtonEnabled(true);
-    edit->setPlaceholderText(tr("Search..."));
-    connect(edit, &QLineEdit::textChanged, this, &LXQtMainMenu::searchTextChanged);
-    mSearch->setDefaultWidget(edit);
-
+    mSearchView = new ActionView;
+    mSearchView->setVisible(false);
+    mSearchViewAction->setDefaultWidget(mSearchView);
+    connect(mSearchView, &QAbstractItemView::activated, this, &LXQtMainMenu::showHideMenu);
+    mSearchEdit = new QLineEdit;
+    mSearchEdit->setClearButtonEnabled(true);
+    mSearchEdit->setPlaceholderText(tr("Search..."));
+    connect(mSearchEdit, &QLineEdit::textChanged, this, &LXQtMainMenu::searchTextChanged);
+    connect(mSearchEdit, &QLineEdit::returnPressed, mSearchView, &ActionView::activateCurrent);
+    mSearchEditAction->setDefaultWidget(mSearchEdit);
     QTimer::singleShot(0, [this] { settingsChanged(); });
 
     mShortcut = GlobalKeyShortcut::Client::instance()->addAction(QString{}, QString("/panel/%1/show_hide").arg(settings()->group()), tr("Show/hide main menu"), this);
@@ -106,7 +117,8 @@ LXQtMainMenu::~LXQtMainMenu()
     mButton.parentWidget()->removeEventFilter(this);
     if (mMenu)
     {
-        mMenu->removeAction(mSearch);
+        mMenu->removeAction(mSearchEditAction);
+        mMenu->removeAction(mSearchViewAction);
     }
 #ifdef HAVE_MENU_CACHE
     if(mMenuCache)
@@ -141,7 +153,8 @@ void LXQtMainMenu::showMenu()
     // Just using Qt`s activateWindow() won't work on some WMs like Kwin.
     // Solution is to execute menu 1ms later using timer
     mMenu->popup(calculatePopupWindowPos(mMenu->sizeHint()).topLeft());
-    mSearch->defaultWidget()->setFocus();
+    if (mFilterMenu || mFilterShow)
+        mSearchEdit->setFocus();
 }
 
 #ifdef HAVE_MENU_CACHE
@@ -209,6 +222,11 @@ void LXQtMainMenu::settingsChanged()
 
     setMenuFontSize();
 
+    mFilterMenu = settings()->value("filterMenu", true).toBool();
+    mFilterShow = settings()->value("filterShow", true).toBool();
+    mSearchEditAction->setVisible(mFilterMenu || mFilterShow);
+    mSearchView->setMaxItemsToShow(settings()->value("filterShowMaxItems", 10).toInt());
+
     realign();
 }
 
@@ -240,7 +258,18 @@ static bool filterMenu(QMenu * menu, QString const & filter)
  ************************************************/
 void LXQtMainMenu::searchTextChanged(QString const & text)
 {
-    filterMenu(mMenu, text);
+    if (mFilterMenu)
+        filterMenu(mMenu, text);
+    if (mFilterShow)
+    {
+        mSearchView->setFilter(text);
+        mSearchView->updateGeometry();
+        mSearchViewAction->setVisible(!text.isEmpty());
+        //TODO: how to force the menu to recalculate it's size in a more elegant way?
+        mMenu->removeAction(mMenu->addSeparator());
+    }
+        
+
 }
 
 /************************************************
@@ -248,10 +277,13 @@ void LXQtMainMenu::searchTextChanged(QString const & text)
  ************************************************/
 void LXQtMainMenu::setSearchFocus(QAction *action)
 {
-    if(action == mSearch)
-      mSearch->defaultWidget()->setFocus();
-    else
-      mSearch->defaultWidget()->clearFocus();
+    if (mFilterMenu || mFilterShow)
+    {
+        if(action == mSearchEditAction)
+            mSearchEdit->setFocus();
+        else
+            mSearchEdit->clearFocus();
+    }
 }
 
 /************************************************
@@ -281,9 +313,14 @@ void LXQtMainMenu::buildMenu()
 
     menu->addSeparator();
     if(mMenu)
-      mMenu->removeAction(mSearch);
-    menu->addAction(mSearch);
+    {
+      mMenu->removeAction(mSearchEditAction);
+      mMenu->removeAction(mSearchViewAction);
+    }
+    menu->addAction(mSearchViewAction);
+    menu->addAction(mSearchEditAction);
     connect(menu, &QMenu::hovered, this, &LXQtMainMenu::setSearchFocus);
+    mSearchView->fillActions(menu);
 
     QMenu *oldMenu = mMenu;
     mMenu = menu;
@@ -413,10 +450,9 @@ bool LXQtMainMenu::eventFilter(QObject *obj, QEvent *event)
                 QKeyEvent * e = dynamic_cast<QKeyEvent*>(event);
                 if (Qt::Key_Escape == e->key())
                 {
-                    QLineEdit * edit = qobject_cast<QLineEdit *>(mSearch->defaultWidget());
-                    if (edit && !edit->text().isEmpty())
+                    if (!mSearchEdit->text().isEmpty())
                     {
-                        edit->setText(QString());
+                        mSearchEdit->setText(QString());
                         //filter out this to not close the menu
                         return true;
                     }
