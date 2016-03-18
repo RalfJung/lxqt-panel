@@ -38,7 +38,7 @@
 #include <QScrollBar>
 #include <QTimer>
 #include <QProxyStyle>
-#include <QHoverEvent>
+#include <QStyledItemDelegate>
 
 namespace
 {
@@ -54,6 +54,29 @@ namespace
 
         }
     };
+
+    class DelayedIconDelegate : public QStyledItemDelegate
+    {
+    public:
+        using QStyledItemDelegate::QStyledItemDelegate;
+
+        virtual QSize sizeHint(const QStyleOptionViewItem& option, const QModelIndex& index) const override
+        {
+            //the XdgCachedMenuAction does load the icon upon showing its menu
+#ifdef HAVE_MENU_CACHE
+            QIcon icon = index.data(Qt::DecorationRole).value<QIcon>();
+            if (icon.isNull())
+            {
+                XdgCachedMenuAction * cached_action = qobject_cast<XdgCachedMenuAction *>(qvariant_cast<QAction *>(index.data(ActionView::ActionRole)));
+                Q_ASSERT(nullptr != cached_action);
+                cached_action->updateIcon();
+                const_cast<QAbstractItemModel *>(index.model())->setData(index, cached_action->icon(), Qt::DecorationRole);
+            }
+#endif
+            return QStyledItemDelegate::sizeHint(option, index);
+        }
+    };
+
 }
 
 ActionView::ActionView(QWidget * parent /*= nullptr*/)
@@ -78,6 +101,10 @@ ActionView::ActionView(QWidget * parent /*= nullptr*/)
         QScopedPointer<QItemSelectionModel> guard{selectionModel()};
         setModel(mProxy);
     }
+    {
+        QScopedPointer<QAbstractItemDelegate> guard{itemDelegate()};
+        setItemDelegate(new DelayedIconDelegate{this});
+    }
     connect(this, &QAbstractItemView::activated, this, &ActionView::onActivated);
 }
 
@@ -94,13 +121,8 @@ void ActionView::addAction(QAction * action)
     QStandardItem * item = new QStandardItem;
     item->setData(QVariant::fromValue<QAction *>(action), ActionRole);
     item->setFont(action->font());
-    //TODO: delay the icon loading... with the ItemDelegate...!?!
-    //the XdgCachedMenuAction does load the icon upon showing its menu
-#ifdef HAVE_MENU_CACHE
-    XdgCachedMenuAction * cached_action = qobject_cast<XdgCachedMenuAction *>(action);
-    if (action->icon().isNull() && nullptr != cached_action)
-        cached_action->updateIcon();
-#endif
+    //Note: XdgCachedMenuAction has delayed icon loading... we are loading the icon
+    //in QStyledItemDelegate:sizeHint if necessary
     item->setIcon(action->icon());
     item->setText(action->text());
     item->setToolTip(action->toolTip());
