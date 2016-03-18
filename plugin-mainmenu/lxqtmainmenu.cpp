@@ -60,6 +60,7 @@ LXQtMainMenu::LXQtMainMenu(const ILXQtPanelPluginStartupInfo &startupInfo):
     mShortcut(0),
     mSearchEditAction{new QWidgetAction{this}},
     mSearchViewAction{new QWidgetAction{this}},
+    mMakeDirtyAction{new QAction(this)},
     mFilterMenu(true),
     mFilterShow(true)
 {
@@ -266,10 +267,9 @@ void LXQtMainMenu::searchTextChanged(QString const & text)
         mSearchView->updateGeometry();
         mSearchViewAction->setVisible(!text.isEmpty());
         //TODO: how to force the menu to recalculate it's size in a more elegant way?
-        mMenu->removeAction(mMenu->addSeparator());
+        mMenu->addAction(mMakeDirtyAction);
+        mMenu->removeAction(mMakeDirtyAction);
     }
-        
-
 }
 
 /************************************************

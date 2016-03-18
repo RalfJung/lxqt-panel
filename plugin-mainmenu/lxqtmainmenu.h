@@ -94,6 +94,7 @@ private:
     QLineEdit * mSearchEdit;
     QWidgetAction * mSearchViewAction;
     ActionView * mSearchView;
+    QAction * mMakeDirtyAction;
     bool mFilterMenu;
     bool mFilterShow;
 
