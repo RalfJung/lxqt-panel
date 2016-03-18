@@ -223,6 +223,8 @@ void LXQtMainMenu::settingsChanged()
 
     setMenuFontSize();
 
+    //clear the search to not leaving the menu in wrong state
+    mSearchEdit->setText(QString());
     mFilterMenu = settings()->value("filterMenu", true).toBool();
     mFilterShow = settings()->value("filterShow", true).toBool();
     mSearchEditAction->setVisible(mFilterMenu || mFilterShow);
@@ -263,9 +265,11 @@ void LXQtMainMenu::searchTextChanged(QString const & text)
         filterMenu(mMenu, text);
     if (mFilterShow)
     {
-        mSearchView->setFilter(text);
-        mSearchView->updateGeometry();
-        mSearchViewAction->setVisible(!text.isEmpty());
+        const bool shown = !text.isEmpty();
+        if (shown)
+            mSearchView->setFilter(text);
+        mSearchView->setVisible(shown);
+        mSearchViewAction->setVisible(shown);
         //TODO: how to force the menu to recalculate it's size in a more elegant way?
         mMenu->addAction(mMakeDirtyAction);
         mMenu->removeAction(mMakeDirtyAction);
