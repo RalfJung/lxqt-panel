@@ -227,6 +227,7 @@ void LXQtMainMenu::settingsChanged()
     mSearchEdit->setText(QString());
     mFilterMenu = settings()->value("filterMenu", true).toBool();
     mFilterShow = settings()->value("filterShow", true).toBool();
+    mSearchEdit->setVisible(mFilterMenu || mFilterShow);
     mSearchEditAction->setVisible(mFilterMenu || mFilterShow);
     mSearchView->setMaxItemsToShow(settings()->value("filterShowMaxItems", 10).toInt());
 
