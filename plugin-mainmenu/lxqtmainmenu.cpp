@@ -88,8 +88,8 @@ LXQtMainMenu::LXQtMainMenu(const ILXQtPanelPluginStartupInfo &startupInfo):
 
     mSearchView = new ActionView;
     mSearchView->setVisible(false);
-    mSearchViewAction->setDefaultWidget(mSearchView);
     connect(mSearchView, &QAbstractItemView::activated, this, &LXQtMainMenu::showHideMenu);
+    mSearchViewAction->setDefaultWidget(mSearchView);
     mSearchEdit = new QLineEdit;
     mSearchEdit->setClearButtonEnabled(true);
     mSearchEdit->setPlaceholderText(tr("Search..."));
@@ -358,10 +358,14 @@ void LXQtMainMenu::setMenuFontSize()
         {
             subMenu->setFont(menuFont);
         }
+        mSearchEdit->setFont(menuFont);
+        mSearchView->setFont(menuFont);
     }
 
     //icon size the same as the font height
-    mTopMenuStyle.setIconSize(QFontMetrics(menuFont).height());
+    const int icon_size = QFontMetrics(menuFont).height();
+    mTopMenuStyle.setIconSize(icon_size);
+    mSearchView->setIconSize(QSize{icon_size, icon_size});
 }
 
 
